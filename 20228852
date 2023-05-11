@@ -1,0 +1,163 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+# Load the dataset
+df = pd.read_csv('API_NY.GDP.PCAP.KD.ZG_DS2_en_csv_v2_5358515.csv', header=2)
+
+# Selecting the columns to be used for clustering
+columns_to_use = [str(year) for year in range(1970, 2010)]
+df_years = df[['Country Name', 'Country Code'] + columns_to_use]
+
+# Fill missing values with the mean
+df_years = df_years.fillna(df_years.mean())
+
+# Normalizing the data
+X = df_years[columns_to_use].values
+X_norm = (X - X.mean(axis=0)) / X.std(axis=0)
+
+# Define the range of number of clusters to try
+n_clusters_range = range(2, 11)
+
+# Iterate over the number of clusters and compute the silhouette score
+silhouette_scores = []
+for n_clusters in n_clusters_range:
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+    labels = kmeans.fit_predict(X_norm)
+    silhouette_scores.append(silhouette_score(X_norm, labels))
+
+# Plot the silhouette scores
+plt.plot(n_clusters_range, silhouette_scores)
+plt.xlabel("Number of Clusters")
+plt.ylabel("Silhouette Score")
+plt.title("Silhouette Analysis: Optimal Number of Clusters")
+plt.show()
+
+
+#inputing the optimal number of clusters to use
+optimal_clusters = 3
+kmeans = KMeans(n_clusters=optimal_clusters, init='k-means++', max_iter=300, n_init=10, random_state=0)
+df_years['Cluster'] = kmeans.fit_predict(df_norm)
+
+# Add cluster classification as a new column to the dataframe
+df_years['Cluster'] = kmeans.labels_
+
+# Plot the clustering results
+plt.figure(figsize=(12, 8))
+for i in range(optimal_clusters):
+    # Select the data for the current cluster
+    cluster_data = df_years[df_years['Cluster'] == i]
+    # Plot the data
+    plt.scatter(cluster_data.index, cluster_data['2004'], label=f'Cluster {i}')
+
+# Plot the cluster centers
+cluster_centers = backscale(kmeans.cluster_centers_, df_min, df_max)
+for i in range(optimal_clusters):
+    # Plot the center for the current cluster
+    plt.scatter(len(df_years), cluster_centers[i, -1], marker='*', s=150, c='black', label=f'Cluster Center {i}')
+
+# Set the title and axis labels
+plt.title('GDP per Capita Growth Clustering Results')
+plt.xlabel('Country Index')
+plt.ylabel('GDP per Capita Growth(annual%) (2004)')
+
+# Add legend
+plt.legend()
+
+# Show the plot
+plt.show()
+
+
+#finding the required years 
+print(df_years.columns)
+
+
+# Create empty lists for each cluster
+clusters = [[] for i in range(optimal_clusters)]
+
+# Add countries to the corresponding cluster list
+for i in range(optimal_clusters):
+    cluster_countries = df_years[df_years['Cluster'] == i]['Country Name'].tolist()
+    clusters[i] = cluster_countries
+
+# Print the countries in each cluster
+for i in range(optimal_clusters):
+    print(f'Countries in Cluster {i}: {clusters[i]}')
+    print()
+
+
+def linear_model(x, a, b):
+    return a*x + b
+
+# Define the columns to use
+columns_to_use = [str(year) for year in range(1975, 2000)]
+
+# Select a country
+country = 'Australia'
+
+# Extract data for the selected country
+country_data = df_years.loc[df_years['Country Name'] == country][columns_to_use].values[0]
+x_data = np.array(range(1975, 2000))
+y_data = country_data
+
+# Fit the linear model
+popt, pcov = curve_fit(linear_model, x_data, y_data)
+
+def err_ranges(popt, pcov, x):
+    perr = np.sqrt(np.diag(pcov))
+    y = linear_model(x, *popt)
+    lower = linear_model(x, *(popt - perr))
+    upper = linear_model(x, *(popt + perr))
+    return y, lower, upper
+
+# Predicting future values and corresponding confidence Ranges
+x_future = np.array(range(1975, 2080))
+y_future, lower_future, upper_future = err_ranges(popt, pcov, x_future)
+
+# Plot the results
+plt.figure(figsize=(12, 6))
+plt.plot(x_data, y_data, 'o', label='Data')
+plt.plot(x_future, y_future, '-', label='Best Fit')
+plt.fill_between(x_future, lower_future, upper_future, alpha=0.3, label='Confidence Range')
+
+# Add predictions for selected years
+predictions = linear_model(np.array([2000, 2020, 2050]), *popt)
+plt.plot([2000, 2020, 2050], predictions, 'o', label='Predictions')
+
+plt.xlabel('Year')
+plt.ylabel('GDP per Capita Growth(annual%)')
+plt.title(f'{country} GDP per Capita Growth Fitting')
+plt.legend()
+plt.show()
+
+
+
+#line graph to display top five countries with the highest gdp
+# Load the dataset
+df = pd.read_csv('API_NY.GDP.PCAP.KD.ZG_DS2_en_csv_v2_5358515.csv', skiprows=4)
+
+# Define a list of 5 countries to plot
+countries = ['Australia', 'Austria', 'Ukraine', 'Arab World', 'Russian Federation']
+
+# Filter the data to include only the selected countries and years
+df = df.loc[df['Country Name'].isin(countries), ['Country Name', '2014', '2015', '2016', '2017', '2018', '2019', '2020', '2021']]
+
+# Melt the dataframe to convert years into a single column
+df_melt = pd.melt(df, id_vars='Country Name', value_vars=[str(i) for i in range(2014, 2021)], var_name='year', value_name='GDP Per Capita Growth')
+
+# Convert the GDP Per Capita Growth column to numeric
+df_melt['GDP Per Capita Growth'] = pd.to_numeric(df_melt['GDP Per Capita Growth'], errors='coerce')
+
+# Plot the data as a line graph
+plt.figure(figsize=(10, 6))
+for country in countries:
+    df_country = df_melt[df_melt['Country Name'] == country]
+    plt.plot(df_country['year'], df_country['GDP Per Capita Growth'], label=country)
+plt.title('GDP Per Capita Growth for clustered Countries, (2014-2020)')
+plt.xlabel('Year')
+plt.ylabel('GDP Per Capita Growth')
+plt.legend()
+plt.show()
+
